@@ -123,8 +123,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="modal-body">
                     <form id="edit-task-form" data-task-id="${task.id}" data-list-id="${task.list_id}" data-target="${targetSelector}" enctype="application/x-www-form-urlencoded">
-                        <input type="hidden" name="id" value="${task.id}">
-                        <input type="hidden" name="list_id" value="${task.list_id}">
+                        <input type="hidden" id="edit-id" name="id" value="${task.id}">
+                        <input type="hidden" id="edit-original-list-id" name="original_list_id" value="${task.list_id}">
                         
                         <div>
                             <label for="edit-title">Title:</label>
@@ -228,12 +228,14 @@ document.addEventListener('DOMContentLoaded', function() {
                           taskIdParam || 
                           form.getAttribute('data-task-id');
                           
-            const listId = form.elements.list_id?.value || 
-                          listIdParam || 
-                          form.getAttribute('data-list-id');
+            const originalListId = listIdParam || 
+                                 form.getAttribute('data-list-id');
+                                 
+            // Get the potentially new list ID from the form
+            const newListId = form.elements.list_id?.value;
 
             // Validate IDs
-            if (!taskId || !listId) {
+            if (!taskId || !originalListId) {
                 alert("Error: Could not find task or list ID");
                 return;
             }
@@ -248,8 +250,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 urlParams.append(key, value);
             }
             
-            // Make the API request
-            fetch(`/api/tasks/${listId}/${taskId}`, {
+            // Ensure list_id is included
+            if (!formData.has('list_id') && newListId) {
+                urlParams.append('list_id', newListId);
+            }
+            
+            // Make the API request - always use the original list ID in the URL
+            const apiUrl = `/api/tasks/${originalListId}/${taskId}`;
+            
+            fetch(apiUrl, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -260,12 +269,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!response.ok) {
                     throw new Error(`HTTP error ${response.status}`);
                 }
-                return response.text();
+                return response.text().then(text => {
+                    // Try to parse as JSON, but handle empty or non-JSON responses
+                    try {
+                        return text ? JSON.parse(text) : {};
+                    } catch (e) {
+                        return { html: text };
+                    }
+                });
             })
             .then(data => {
                 closeModal();
-                alert(`Task updated successfully!`);
-                window.location.reload(); // Reload to see changes
+                
+                // Check if we're in the all-kanban view
+                const isAllKanban = window.location.pathname.includes('/all-kanban');
+                
+                if (isAllKanban || (originalListId !== newListId)) {
+                    // For all-kanban view or when the list changed, reload the page
+                    window.location.reload();
+                }
             })
             .catch(error => {
                 console.error("Error submitting task:", error);

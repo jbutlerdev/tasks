@@ -1,0 +1,15 @@
+[Unit]
+Description=Tasks Service
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+WorkingDirectory=/opt/tasks
+ExecStart=/opt/tasks/tasks -port 8085 -data /var/lib/tasks
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

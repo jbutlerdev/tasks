@@ -1046,6 +1046,145 @@ func renderDueDate(dueDate *time.Time) string {
 	return fmt.Sprintf("<span class=\"task-due-date\">Due: %s</span>", dueDate.Format("2006-01-02"))
 }
 
+// HandleAllKanbanUI renders a kanban view of all tasks across all lists
+func HandleAllKanbanUI(store *storage.FileStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Get all lists for the header links
+		lists, err := store.GetAllLists()
+		if err != nil {
+			http.Error(w, "Error loading lists", http.StatusInternalServerError)
+			return
+		}
+
+		// Get all tasks
+		tasks, err := store.GetAllTasks()
+		if err != nil {
+			http.Error(w, "Error loading tasks", http.StatusInternalServerError)
+			return
+		}
+
+		// Group tasks by state
+		tasksByState := make(map[models.TaskState][]models.Task)
+		for _, task := range tasks {
+			tasksByState[task.State] = append(tasksByState[task.State], task)
+		}
+
+		// Create list selector HTML
+		var listSelectorHTML bytes.Buffer
+		listSelectorHTML.WriteString("<div class=\"list-selector\">")
+		listSelectorHTML.WriteString("<h3>Filter by List:</h3>")
+		listSelectorHTML.WriteString("<ul>")
+		listSelectorHTML.WriteString("<li><a href=\"/all-kanban\" class=\"active\">All Lists</a></li>")
+		for _, list := range lists {
+			listSelectorHTML.WriteString(fmt.Sprintf("<li><a href=\"/kanban/%s\">%s</a></li>", list.ID, list.Name))
+		}
+		listSelectorHTML.WriteString("</ul>")
+		listSelectorHTML.WriteString("</div>")
+
+		// In a real app, this would use a template engine
+		html := fmt.Sprintf(`
+			<!DOCTYPE html>
+			<html>
+				<head>
+					<title>Kanban - All Tasks</title>
+					<meta charset="UTF-8">
+					<meta name="viewport" content="width=device-width, initial-scale=1.0">
+					<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+					<script src="https://unpkg.com/htmx.org@1.9.2"></script>
+					<link rel="stylesheet" href="/static/style.css">
+					<script src="/static/app.js" defer></script>
+				</head>
+				<body>
+					<header>
+						<h1>Task Manager</h1>
+						<nav>
+							<a href="/">All Tasks</a>
+							<a href="/lists">Task Lists</a>
+							<a href="/api/openapi" target="_blank">API Docs</a>
+						</nav>
+					</header>
+					<main>
+						<h2>Kanban Board - All Tasks</h2>
+						%s
+						<div class="kanban-board">
+							<div class="kanban-column">
+								<h3>Todo</h3>
+								<div class="kanban-tasks">
+									%s
+								</div>
+							</div>
+							<div class="kanban-column">
+								<h3>In Progress</h3>
+								<div class="kanban-tasks">
+									%s
+								</div>
+							</div>
+							<div class="kanban-column">
+								<h3>Blocked</h3>
+								<div class="kanban-tasks">
+									%s
+								</div>
+							</div>
+							<div class="kanban-column">
+								<h3>Done</h3>
+								<div class="kanban-tasks">
+									%s
+								</div>
+							</div>
+						</div>
+					</main>
+
+					<!-- Task edit modal -->
+					<div id="task-edit-modal" class="modal">
+						<div class="modal-content">
+							<span class="close">&times;</span>
+							<h2>Edit Task</h2>
+							<form id="edit-task-form" enctype="application/x-www-form-urlencoded">
+								<input type="hidden" id="edit-task-id" name="id">
+								<div>
+									<label for="edit-title">Title:</label>
+									<input type="text" id="edit-title" name="title" required>
+								</div>
+								<div>
+									<label for="edit-description">Description:</label>
+									<textarea id="edit-description" name="description"></textarea>
+								</div>
+								<div>
+									<label for="edit-state">State:</label>
+									<select id="edit-state" name="state">
+										<option value="todo">Todo</option>
+										<option value="in_progress">In Progress</option>
+										<option value="blocked">Blocked</option>
+										<option value="done">Done</option>
+									</select>
+								</div>
+								<div>
+									<label for="edit-due-date">Due Date:</label>
+									<input type="date" id="edit-due-date" name="due_date">
+									<button type="button" id="clear-due-date">Clear</button>
+								</div>
+								<div>
+									<label for="edit-list-id">List:</label>
+									<select id="edit-list-id" name="list_id">
+										<!-- Will be populated by JavaScript -->
+									</select>
+								</div>
+								<button type="submit">Update Task</button>
+							</form>
+						</div>
+					</div>
+				</body>
+			</html>
+		`, listSelectorHTML.String(),
+			renderKanbanTasksHTML(tasksByState[models.TaskStateTodo]), 
+			renderKanbanTasksHTML(tasksByState[models.TaskStateInProgress]),
+			renderKanbanTasksHTML(tasksByState[models.TaskStateBlocked]),
+			renderKanbanTasksHTML(tasksByState[models.TaskStateDone]))
+
+		writeHTMX(w, http.StatusOK, html)
+	}
+}
+
 // Utility functions
 
 // decodeBody decodes a request body into a struct

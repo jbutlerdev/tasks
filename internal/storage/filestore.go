@@ -11,6 +11,24 @@ import (
 	"github.com/jbutlerdev/tasks/internal/models"
 )
 
+// TaskStore defines the interface for task storage
+type TaskStore interface {
+	// List operations
+	GetAllLists() ([]models.TaskList, error)
+	GetList(id string) (*models.TaskList, error)
+	CreateList(list *models.TaskList) error
+	UpdateList(list *models.TaskList) error
+	DeleteList(id string) error
+	
+	// Task operations
+	GetAllTasks() ([]models.Task, error)
+	GetTasksByList(listID string) ([]models.Task, error)
+	GetTask(listID, taskID string) (*models.Task, error)
+	CreateTask(task *models.Task) error
+	UpdateTask(task *models.Task) error
+	DeleteTask(listID, taskID string) error
+}
+
 type FileStore struct {
 	baseDir string
 	mutex   *sync.RWMutex
@@ -194,7 +212,7 @@ func (fs *FileStore) GetAllTasks() ([]models.Task, error) {
 
 	// For each list, get all tasks
 	for _, list := range lists {
-		tasks, err := fs.getTasksForList(list.ID)
+		tasks, err := fs.GetTasksForList(list.ID)
 		if err != nil {
 			// Skip if tasks cannot be read
 			continue
@@ -205,16 +223,16 @@ func (fs *FileStore) GetAllTasks() ([]models.Task, error) {
 	return allTasks, nil
 }
 
-// GetTasksForList returns all tasks for a specific list
-func (fs *FileStore) GetTasksForList(listID string) ([]models.Task, error) {
+// GetTasksByList returns all tasks for a specific list
+func (fs *FileStore) GetTasksByList(listID string) ([]models.Task, error) {
 	fs.mutex.RLock()
 	defer fs.mutex.RUnlock()
 
-	return fs.getTasksForList(listID)
+	return fs.GetTasksForList(listID)
 }
 
-// getTasksForList is an internal function to get tasks for a list (without locking)
-func (fs *FileStore) getTasksForList(listID string) ([]models.Task, error) {
+// GetTasksForList gets tasks for a list
+func (fs *FileStore) GetTasksForList(listID string) ([]models.Task, error) {
 	tasksDir := filepath.Join(fs.baseDir, "lists", listID, "tasks")
 	
 	// Check if tasks directory exists
@@ -252,26 +270,59 @@ func (fs *FileStore) getTasksForList(listID string) ([]models.Task, error) {
 	return tasks, nil
 }
 
-// GetTask returns a single task by ID and list ID
+// GetTask returns a single task by ID
 func (fs *FileStore) GetTask(listID, taskID string) (*models.Task, error) {
 	fs.mutex.RLock()
 	defer fs.mutex.RUnlock()
 
+	// Check if the specific list's task exists first
 	taskPath := filepath.Join(fs.baseDir, "lists", listID, "tasks", taskID+".json")
-	data, err := os.ReadFile(taskPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("task not found: %s/%s", listID, taskID)
+	_, err := os.Stat(taskPath)
+	if err == nil {
+		// Found the task, read it
+		data, err := os.ReadFile(taskPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read task: %w", err)
 		}
-		return nil, fmt.Errorf("failed to read task: %w", err)
+
+		var task models.Task
+		if err := json.Unmarshal(data, &task); err != nil {
+			return nil, fmt.Errorf("failed to parse task: %w", err)
+		}
+
+		return &task, nil
 	}
 
-	var task models.Task
-	if err := json.Unmarshal(data, &task); err != nil {
-		return nil, fmt.Errorf("failed to parse task: %w", err)
+	// If we couldn't find it in the specific list, search all lists
+	if listID != "" {
+		// Get all lists
+		lists, err := fs.GetAllLists()
+		if err != nil {
+			return nil, err
+		}
+
+		// Search for the task in all lists
+		for _, list := range lists {
+			taskPath := filepath.Join(fs.baseDir, "lists", list.ID, "tasks", taskID+".json")
+			_, err := os.Stat(taskPath)
+			if err == nil {
+				// Found the task, read it
+				data, err := os.ReadFile(taskPath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read task: %w", err)
+				}
+
+				var task models.Task
+				if err := json.Unmarshal(data, &task); err != nil {
+					return nil, fmt.Errorf("failed to parse task: %w", err)
+				}
+
+				return &task, nil
+			}
+		}
 	}
 
-	return &task, nil
+	return nil, fmt.Errorf("task not found: %s", taskID)
 }
 
 // CreateTask creates a new task
@@ -332,11 +383,6 @@ func (fs *FileStore) UpdateTask(task *models.Task) error {
 	
 	// Set the task path
 	taskPath := filepath.Join(tasksDir, task.ID+".json")
-	
-	// Log what we're trying to do
-	fmt.Printf("DEBUG: Updating task at path: %s\n", taskPath)
-	fmt.Printf("DEBUG: Task data: ID=%s, Title=%s, Description=%s, State=%s\n", 
-		task.ID, task.Title, task.Description, task.State)
 
 	// Update timestamp
 	task.UpdatedAt = time.Now()
@@ -350,9 +396,6 @@ func (fs *FileStore) UpdateTask(task *models.Task) error {
 	if err := os.WriteFile(taskPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write task file: %w", err)
 	}
-	
-	// Log success
-	fmt.Println("DEBUG: Task update successful");
 
 	return nil
 }
@@ -402,11 +445,6 @@ func (fs *FileStore) MoveTask(originalListID, taskID, newListID string) (*models
 	// Write the task to the new list
 	newTaskPath := filepath.Join(newTasksDir, taskID+".json")
 	
-	// Log the move operation
-	fmt.Printf("DEBUG: Moving task: %s -> %s\n", originalTaskPath, newTaskPath)
-	fmt.Printf("DEBUG: Task data: ID=%s, Title=%s, Description=%s, State=%s\n", 
-		task.ID, task.Title, task.Description, task.State)
-	
 	data, err = json.MarshalIndent(task, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize task: %w", err)
@@ -421,8 +459,6 @@ func (fs *FileStore) MoveTask(originalListID, taskID, newListID string) (*models
 		return nil, fmt.Errorf("failed to delete original task: %w", err)
 	}
 	
-	fmt.Println("DEBUG: Task move successful");
-	
 	return &task, nil
 }
 
@@ -431,14 +467,35 @@ func (fs *FileStore) DeleteTask(listID, taskID string) error {
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 
+	// First try to delete from the specific list
 	taskPath := filepath.Join(fs.baseDir, "lists", listID, "tasks", taskID+".json")
-	if _, err := os.Stat(taskPath); os.IsNotExist(err) {
-		return fmt.Errorf("task not found: %s/%s", listID, taskID)
+	_, err := os.Stat(taskPath)
+	if err == nil {
+		// Found the task, delete it
+		if err := os.Remove(taskPath); err != nil {
+			return fmt.Errorf("failed to delete task: %w", err)
+		}
+		return nil
 	}
 
-	if err := os.Remove(taskPath); err != nil {
-		return fmt.Errorf("failed to delete task: %w", err)
+	// If not found in the specific list, search all lists
+	lists, err := fs.GetAllLists()
+	if err != nil {
+		return err
 	}
 
-	return nil
+	// Search for the task in all lists
+	for _, list := range lists {
+		taskPath := filepath.Join(fs.baseDir, "lists", list.ID, "tasks", taskID+".json")
+		_, err := os.Stat(taskPath)
+		if err == nil {
+			// Found the task, delete it
+			if err := os.Remove(taskPath); err != nil {
+				return fmt.Errorf("failed to delete task: %w", err)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("task not found: %s", taskID)
 }

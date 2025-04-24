@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,9 @@ import (
 	"github.com/jbutlerdev/tasks/internal/api"
 	"github.com/jbutlerdev/tasks/internal/storage"
 )
+
+//go:embed web/static
+var staticFiles embed.FS
 
 func main() {
 	port := flag.Int("port", 8080, "Port to run the server on")
@@ -21,8 +25,8 @@ func main() {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 
-	// Setup API routes
-	router := api.NewRouter(store)
+	// Setup API routes with embedded static files
+	router := api.NewRouter(store, staticFiles)
 
 	// Start server
 	addr := fmt.Sprintf(":%d", *port)

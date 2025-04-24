@@ -1,8 +1,11 @@
 package api
 
 import (
+	"embed"
+	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -26,7 +29,7 @@ func HTMXMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(store *storage.FileStore) http.Handler {
+func NewRouter(store *storage.FileStore, staticFS embed.FS) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware
@@ -67,8 +70,29 @@ func NewRouter(store *storage.FileStore) http.Handler {
 
 	// Web UI routes
 	r.Route("/", func(r chi.Router) {
-		// Serve static files
-		fileServer := http.FileServer(http.Dir("./web/static"))
+		// Create a custom file server to set proper content types
+		staticSubFS, err := fs.Sub(staticFS, "web/static")
+		if err != nil {
+			log.Fatalf("Failed to create sub-filesystem for static files: %v", err)
+		}
+		
+		// Custom file server that ensures correct MIME types
+		fileServer := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+			
+			// Set correct content types based on file extension
+			if strings.HasSuffix(path, ".css") {
+				w.Header().Set("Content-Type", "text/css")
+			} else if strings.HasSuffix(path, ".js") {
+				w.Header().Set("Content-Type", "application/javascript")
+			} else if strings.HasSuffix(path, ".ico") {
+				w.Header().Set("Content-Type", "image/x-icon")
+			}
+			
+			// Pass to the standard file server
+			http.FileServer(http.FS(staticSubFS)).ServeHTTP(w, r)
+		})
+		
 		r.Handle("/static/*", http.StripPrefix("/static", fileServer))
 
 		// UI routes
@@ -76,8 +100,8 @@ func NewRouter(store *storage.FileStore) http.Handler {
 		r.Get("/lists", HandleListsUI(store))
 		r.Get("/lists/{listID}", HandleListUI(store))
 		r.Get("/kanban/{listID}", HandleKanbanUI(store))
+		r.Get("/all-kanban", HandleAllKanbanUI(store))
 	})
 
 	return r
 }
-
