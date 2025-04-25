@@ -172,6 +172,66 @@ button[type="submit"]:hover {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* Task Filters */
+.list-filter {
+  background-color: var(--surface-color);
+  border-radius: var(--border-radius);
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--border-color);
+}
+
+.list-filter h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--primary-light);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.4rem;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.checkbox-group .filter-label {
+  display: flex;
+  align-items: center;
+  font-weight: normal;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--surface-color-light);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s;
+  color: var(--text-color-secondary);
+}
+
+.checkbox-group .filter-label:hover {
+  border-color: var(--primary-color);
+  color: var(--text-color);
+}
+
+.checkbox-group input[type="checkbox"]:checked + span {
+  color: var(--primary-light);
+  font-weight: 500;
+}
+
+.checkbox-group input[type="checkbox"]:checked {
+  accent-color: var(--primary-color);
+}
+
+.checkbox-group .filter-label input[type="checkbox"] {
+  width: auto;
+  margin-right: 0.35rem;
+  cursor: pointer;
+}
+
 /* Task Lists */
 .lists-container, .tasks-container {
   margin: 1.5rem 0;

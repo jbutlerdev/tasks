@@ -562,6 +562,21 @@ func HandleHomeUI(store *storage.FileStore) http.HandlerFunc {
 			return
 		}
 
+		// Create list filter HTML with checkboxes
+		var listSelectorHTML bytes.Buffer
+		listSelectorHTML.WriteString("<div class=\"list-filter\">")
+		listSelectorHTML.WriteString("<h3>Filter by List:</h3>")
+		listSelectorHTML.WriteString("<form id=\"list-filter-form\">")
+		listSelectorHTML.WriteString("<div class=\"checkbox-group\">")
+		listSelectorHTML.WriteString("<label class=\"filter-label\"><input type=\"checkbox\" value=\"all\" checked data-filter-all><span>All Lists</span></label>")
+		for _, list := range lists {
+			listSelectorHTML.WriteString(fmt.Sprintf("<label class=\"filter-label\"><input type=\"checkbox\" name=\"list\" value=\"%s\" data-list-id=\"%s\"><span>%s</span></label>", 
+				list.ID, list.ID, list.Name))
+		}
+		listSelectorHTML.WriteString("</div>")
+		listSelectorHTML.WriteString("</form>")
+		listSelectorHTML.WriteString("</div>")
+
 		// In a real app, this would use a template engine
 		html := fmt.Sprintf(`
 			<!DOCTYPE html>
@@ -581,18 +596,22 @@ func HandleHomeUI(store *storage.FileStore) http.HandlerFunc {
 						<nav>
 							<a href="/">All Tasks</a>
 							<a href="/lists">Task Lists</a>
+							<a href="/all-kanban">Kanban View</a>
 							<a href="/api/openapi" target="_blank">API Docs</a>
 						</nav>
 					</header>
 					<main>
 						<h2>All Tasks</h2>
+						<div class="filter-container">
+							%s
+						</div>
 						<div class="tasks-container">
 							%s
 						</div>
 					</main>
 				</body>
 			</html>
-		`, renderAllTasksHTML(tasks, lists))
+		`, listSelectorHTML.String(), renderAllTasksHTML(tasks, lists))
 
 		writeHTMX(w, http.StatusOK, html)
 	}
@@ -626,6 +645,7 @@ func HandleListsUI(store *storage.FileStore) http.HandlerFunc {
 						<nav>
 							<a href="/">All Tasks</a>
 							<a href="/lists">Task Lists</a>
+							<a href="/all-kanban">Kanban View</a>
 							<a href="/api/openapi" target="_blank">API Docs</a>
 						</nav>
 					</header>
@@ -829,6 +849,7 @@ func HandleKanbanUI(store *storage.FileStore) http.HandlerFunc {
 						<nav>
 							<a href="/">All Tasks</a>
 							<a href="/lists">Task Lists</a>
+							<a href="/all-kanban">All Kanban</a>
 							<a href="/lists/%s">List View</a>
 							<a href="/api/openapi" target="_blank">API Docs</a>
 						</nav>
@@ -1063,22 +1084,31 @@ func HandleAllKanbanUI(store *storage.FileStore) http.HandlerFunc {
 			return
 		}
 
+		// Get list names for task display
+		listNames := make(map[string]string)
+		for _, list := range lists {
+			listNames[list.ID] = list.Name
+		}
+		
 		// Group tasks by state
 		tasksByState := make(map[models.TaskState][]models.Task)
 		for _, task := range tasks {
 			tasksByState[task.State] = append(tasksByState[task.State], task)
 		}
 
-		// Create list selector HTML
+		// Create list filter HTML with checkboxes
 		var listSelectorHTML bytes.Buffer
-		listSelectorHTML.WriteString("<div class=\"list-selector\">")
+		listSelectorHTML.WriteString("<div class=\"list-filter\">")
 		listSelectorHTML.WriteString("<h3>Filter by List:</h3>")
-		listSelectorHTML.WriteString("<ul>")
-		listSelectorHTML.WriteString("<li><a href=\"/all-kanban\" class=\"active\">All Lists</a></li>")
+		listSelectorHTML.WriteString("<form id=\"list-filter-form\">")
+		listSelectorHTML.WriteString("<div class=\"checkbox-group\">")
+		listSelectorHTML.WriteString("<label class=\"filter-label\"><input type=\"checkbox\" value=\"all\" checked data-filter-all><span>All Lists</span></label>")
 		for _, list := range lists {
-			listSelectorHTML.WriteString(fmt.Sprintf("<li><a href=\"/kanban/%s\">%s</a></li>", list.ID, list.Name))
+			listSelectorHTML.WriteString(fmt.Sprintf("<label class=\"filter-label\"><input type=\"checkbox\" name=\"list\" value=\"%s\" data-list-id=\"%s\"><span>%s</span></label>", 
+				list.ID, list.ID, list.Name))
 		}
-		listSelectorHTML.WriteString("</ul>")
+		listSelectorHTML.WriteString("</div>")
+		listSelectorHTML.WriteString("</form>")
 		listSelectorHTML.WriteString("</div>")
 
 		// In a real app, this would use a template engine
@@ -1100,6 +1130,7 @@ func HandleAllKanbanUI(store *storage.FileStore) http.HandlerFunc {
 						<nav>
 							<a href="/">All Tasks</a>
 							<a href="/lists">Task Lists</a>
+							<a href="/all-kanban">Kanban View</a>
 							<a href="/api/openapi" target="_blank">API Docs</a>
 						</nav>
 					</header>

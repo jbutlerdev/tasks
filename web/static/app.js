@@ -7,6 +7,79 @@ document.addEventListener('htmx:afterRequest', function(event) {
     }
 });
 
+// List filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const filterForm = document.getElementById('list-filter-form');
+    if (filterForm) {
+        // Set up filter event handlers
+        const allCheckbox = filterForm.querySelector('[data-filter-all]');
+        const listCheckboxes = filterForm.querySelectorAll('[data-list-id]');
+        
+        // Function to update task visibility based on selected filters
+        function updateTaskVisibility() {
+            // Get all tasks (both regular and kanban tasks)
+            const tasks = document.querySelectorAll('.task, .kanban-task');
+            const selectedListIds = [];
+            let showAll = allCheckbox.checked;
+            
+            // If no specific lists are selected or "All Lists" is checked, show all tasks
+            if (showAll) {
+                tasks.forEach(task => task.style.display = '');
+                return;
+            }
+            
+            // Collect selected list IDs
+            listCheckboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedListIds.push(checkbox.getAttribute('data-list-id'));
+                }
+            });
+            
+            // If no lists are selected after unchecking "All Lists", show nothing
+            if (selectedListIds.length === 0) {
+                tasks.forEach(task => task.style.display = 'none');
+                return;
+            }
+            
+            // Show only tasks from selected lists
+            tasks.forEach(task => {
+                const listId = task.getAttribute('data-list-id');
+                task.style.display = selectedListIds.includes(listId) ? '' : 'none';
+            });
+        }
+        
+        // Add event listeners
+        allCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                // When "All Lists" is checked, uncheck all individual lists
+                listCheckboxes.forEach(checkbox => checkbox.checked = false);
+            }
+            updateTaskVisibility();
+        });
+        
+        listCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                // If any individual list is checked, uncheck "All Lists"
+                if (this.checked) {
+                    allCheckbox.checked = false;
+                }
+                
+                // If no individual lists are checked, check "All Lists"
+                let anyChecked = false;
+                listCheckboxes.forEach(cb => {
+                    if (cb.checked) anyChecked = true;
+                });
+                
+                if (!anyChecked) {
+                    allCheckbox.checked = true;
+                }
+                
+                updateTaskVisibility();
+            });
+        });
+    }
+});
+
 // Handle custom clear form event
 document.addEventListener('clearListForm', function(event) {
     const form = document.querySelector('.new-list-form form');
