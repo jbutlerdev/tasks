@@ -1,6 +1,7 @@
 package api
 
 import (
+	"html/template"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -197,6 +198,10 @@ func HandleCreateTask(store *storage.FileStore) http.HandlerFunc {
 
 			task.Title = r.FormValue("title")
 			task.Description = r.FormValue("description")
+			if st := r.FormValue("state"); st != "" && !validTaskState(st) {
+				writeErrorJSON(w, http.StatusBadRequest, "Invalid state")
+				return
+			}
 			task.State = models.TaskState(r.FormValue("state"))
 
 			// Parse due date if provided
@@ -383,6 +388,9 @@ func parseTaskFormOrJSON(r *http.Request, task *models.Task) error {
 		}
 		
 		if state := r.FormValue("state"); state != "" {
+			if !validTaskState(state) {
+				return fmt.Errorf("invalid state")
+			}
 			task.State = models.TaskState(state)
 		}
 		
@@ -530,6 +538,22 @@ func HandleExportMarkdown(store *storage.FileStore) http.HandlerFunc {
 }
 
 // Helper to convert state to a title
+// validTaskState gates task.State at the boundary: only model-defined
+// states are stored, so no attacker string can reach class attributes.
+func validTaskState(s string) bool {
+	switch models.TaskState(s) {
+	case models.TaskStateTodo, models.TaskStateInProgress, models.TaskStateDone, models.TaskStateBlocked:
+		return true
+	}
+	return false
+}
+
+// esc HTML-escapes user-controlled data before it is embedded in
+// hand-built HTML (CodeQL go/reflected-xss, scan/tasks.sarif).
+func esc(s string) string {
+	return template.HTMLEscapeString(s)
+}
+
 func stateToTitle(state models.TaskState) string {
 	switch state {
 	case models.TaskStateTodo:
@@ -541,7 +565,8 @@ func stateToTitle(state models.TaskState) string {
 	case models.TaskStateDone:
 		return "Done"
 	default:
-		return string(state)
+		// Unvalidated state must not reach attributes/text sinks.
+		return esc(string(state))
 	}
 }
 
@@ -571,7 +596,7 @@ func HandleHomeUI(store *storage.FileStore) http.HandlerFunc {
 		listSelectorHTML.WriteString("<label class=\"filter-label\"><input type=\"checkbox\" value=\"all\" checked data-filter-all><span>All Lists</span></label>")
 		for _, list := range lists {
 			listSelectorHTML.WriteString(fmt.Sprintf("<label class=\"filter-label\"><input type=\"checkbox\" name=\"list\" value=\"%s\" data-list-id=\"%s\"><span>%s</span></label>", 
-				list.ID, list.ID, list.Name))
+				list.ID, list.ID, esc(list.Name)))
 		}
 		listSelectorHTML.WriteString("</div>")
 		listSelectorHTML.WriteString("</form>")
@@ -797,7 +822,7 @@ func HandleListUI(store *storage.FileStore) http.HandlerFunc {
 					</div>
 				</body>
 			</html>
-		`, list.Name, listID, list.Name, list.Description, renderTasksHTML(tasks), listID)
+		`, esc(list.Name), listID, esc(list.Name), esc(list.Description), renderTasksHTML(tasks), listID)
 
 		writeHTMX(w, http.StatusOK, html)
 	}
@@ -925,7 +950,7 @@ func HandleKanbanUI(store *storage.FileStore) http.HandlerFunc {
 					</div>
 				</body>
 			</html>
-		`, list.Name, listID, list.Name, 
+		`, esc(list.Name), listID, esc(list.Name), 
 			renderKanbanTasksHTML(tasksByState[models.TaskStateTodo]), 
 			renderKanbanTasksHTML(tasksByState[models.TaskStateInProgress]),
 			renderKanbanTasksHTML(tasksByState[models.TaskStateBlocked]),
@@ -946,7 +971,7 @@ func renderAllTasksHTML(tasks []models.Task, lists []models.TaskList) string {
 	// Create a map of list IDs to names
 	listNames := make(map[string]string)
 	for _, list := range lists {
-		listNames[list.ID] = list.Name
+		listNames[list.ID] = esc(list.Name)
 	}
 
 	var buf bytes.Buffer
@@ -967,7 +992,7 @@ func renderAllTasksHTML(tasks []models.Task, lists []models.TaskList) string {
 					</div>
 				</div>
 			</div>
-		`, task.State, task.ID, task.ListID, task.Title, listName, task.Description, stateToTitle(task.State), renderDueDate(task.DueDate)))
+		`, esc(string(task.State)), task.ID, task.ListID, esc(task.Title), listName, esc(task.Description), stateToTitle(task.State), renderDueDate(task.DueDate)))
 	}
 	buf.WriteString("</div>")
 	return buf.String()
@@ -995,7 +1020,7 @@ func renderTasksHTML(tasks []models.Task) string {
 					</div>
 				</div>
 			</div>
-		`, task.State, task.ID, task.ListID, task.Title, task.Description, stateToTitle(task.State), renderDueDate(task.DueDate)))
+		`, esc(string(task.State)), task.ID, task.ListID, esc(task.Title), esc(task.Description), stateToTitle(task.State), renderDueDate(task.DueDate)))
 	}
 	buf.WriteString("</div>")
 	return buf.String()
@@ -1026,7 +1051,7 @@ func renderKanbanTasksHTML(tasks []models.Task) string {
 					%s
 				</div>
 			</div>
-		`, task.ID, task.ListID, task.Title, task.Description, renderDueDate(task.DueDate)))
+		`, task.ID, task.ListID, esc(task.Title), esc(task.Description), renderDueDate(task.DueDate)))
 	}
 	return buf.String()
 }
@@ -1087,7 +1112,7 @@ func HandleAllKanbanUI(store *storage.FileStore) http.HandlerFunc {
 		// Get list names for task display
 		listNames := make(map[string]string)
 		for _, list := range lists {
-			listNames[list.ID] = list.Name
+			listNames[list.ID] = esc(list.Name)
 		}
 		
 		// Group tasks by state
@@ -1105,7 +1130,7 @@ func HandleAllKanbanUI(store *storage.FileStore) http.HandlerFunc {
 		listSelectorHTML.WriteString("<label class=\"filter-label\"><input type=\"checkbox\" value=\"all\" checked data-filter-all><span>All Lists</span></label>")
 		for _, list := range lists {
 			listSelectorHTML.WriteString(fmt.Sprintf("<label class=\"filter-label\"><input type=\"checkbox\" name=\"list\" value=\"%s\" data-list-id=\"%s\"><span>%s</span></label>", 
-				list.ID, list.ID, list.Name))
+				list.ID, list.ID, esc(list.Name)))
 		}
 		listSelectorHTML.WriteString("</div>")
 		listSelectorHTML.WriteString("</form>")

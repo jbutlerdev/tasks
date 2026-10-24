@@ -94,6 +94,9 @@ func (fs *FileStore) GetAllLists() ([]models.TaskList, error) {
 
 // GetList returns a single task list by ID
 func (fs *FileStore) GetList(id string) (*models.TaskList, error) {
+	if err := ValidateID(id); err != nil {
+		return nil, err
+	}
 	fs.mutex.RLock()
 	defer fs.mutex.RUnlock()
 
@@ -116,6 +119,9 @@ func (fs *FileStore) GetList(id string) (*models.TaskList, error) {
 
 // CreateList creates a new task list
 func (fs *FileStore) CreateList(list *models.TaskList) error {
+	if err := ValidateID(list.ID); err != nil {
+		return err
+	}
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 
@@ -152,6 +158,9 @@ func (fs *FileStore) CreateList(list *models.TaskList) error {
 
 // UpdateList updates an existing task list
 func (fs *FileStore) UpdateList(list *models.TaskList) error {
+	if err := ValidateID(list.ID); err != nil {
+		return err
+	}
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 
@@ -180,6 +189,9 @@ func (fs *FileStore) UpdateList(list *models.TaskList) error {
 
 // DeleteList deletes a task list and all its tasks
 func (fs *FileStore) DeleteList(id string) error {
+	if err := ValidateID(id); err != nil {
+		return err
+	}
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 
@@ -225,6 +237,9 @@ func (fs *FileStore) GetAllTasks() ([]models.Task, error) {
 
 // GetTasksByList returns all tasks for a specific list
 func (fs *FileStore) GetTasksByList(listID string) ([]models.Task, error) {
+	if err := ValidateID(listID); err != nil {
+		return nil, err
+	}
 	fs.mutex.RLock()
 	defer fs.mutex.RUnlock()
 
@@ -233,6 +248,9 @@ func (fs *FileStore) GetTasksByList(listID string) ([]models.Task, error) {
 
 // GetTasksForList gets tasks for a list
 func (fs *FileStore) GetTasksForList(listID string) ([]models.Task, error) {
+	if err := ValidateID(listID); err != nil {
+		return nil, err
+	}
 	tasksDir := filepath.Join(fs.baseDir, "lists", listID, "tasks")
 	
 	// Check if tasks directory exists
@@ -272,6 +290,12 @@ func (fs *FileStore) GetTasksForList(listID string) ([]models.Task, error) {
 
 // GetTask returns a single task by ID
 func (fs *FileStore) GetTask(listID, taskID string) (*models.Task, error) {
+	if err := ValidateID(listID); err != nil {
+		return nil, err
+	}
+	if err := ValidateID(taskID); err != nil {
+		return nil, err
+	}
 	fs.mutex.RLock()
 	defer fs.mutex.RUnlock()
 
@@ -327,6 +351,12 @@ func (fs *FileStore) GetTask(listID, taskID string) (*models.Task, error) {
 
 // CreateTask creates a new task
 func (fs *FileStore) CreateTask(task *models.Task) error {
+	if err := ValidateID(task.ID); err != nil {
+		return err
+	}
+	if err := ValidateID(task.ListID); err != nil {
+		return err
+	}
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 
@@ -366,6 +396,12 @@ func (fs *FileStore) CreateTask(task *models.Task) error {
 
 // UpdateTask updates an existing task
 func (fs *FileStore) UpdateTask(task *models.Task) error {
+	if err := ValidateID(task.ID); err != nil {
+		return err
+	}
+	if err := ValidateID(task.ListID); err != nil {
+		return err
+	}
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 
@@ -402,6 +438,15 @@ func (fs *FileStore) UpdateTask(task *models.Task) error {
 
 // MoveTask moves a task from one list to another
 func (fs *FileStore) MoveTask(originalListID, taskID, newListID string) (*models.Task, error) {
+	if err := ValidateID(originalListID); err != nil {
+		return nil, err
+	}
+	if err := ValidateID(taskID); err != nil {
+		return nil, err
+	}
+	if err := ValidateID(newListID); err != nil {
+		return nil, err
+	}
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 	
@@ -464,6 +509,12 @@ func (fs *FileStore) MoveTask(originalListID, taskID, newListID string) (*models
 
 // DeleteTask deletes a task
 func (fs *FileStore) DeleteTask(listID, taskID string) error {
+	if err := ValidateID(listID); err != nil {
+		return err
+	}
+	if err := ValidateID(taskID); err != nil {
+		return err
+	}
 	fs.mutex.Lock()
 	defer fs.mutex.Unlock()
 
